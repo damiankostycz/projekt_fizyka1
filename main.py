@@ -2,60 +2,86 @@ import time
 import pygame
 import numpy as np
 
-h = 1         # spatial step width
-k = 1         # time step width
-dimx = 400    # width of the simulation domain
-dimy = 400    # height of the simulation domain
-cellsize = 2  # display size of a cell in pixel
+h = 1
+k = 1
+dimx = 400
+dimy = 400
+cellsize = 2
+
+dx, dy = 0.01, 0.01
+dt = 0.001
+sigma_max = 20
+
+
+npml = 400
+sigma_x = np.zeros((dimx, dimy))
+sigma_y = np.zeros((dimx, dimy))
+for i in range(npml):
+    x = i / npml
+    sigma_x[i,:] = sigma_max * (x**4)
+    sigma_x[dimx-1-i,:] = sigma_max * (x**4)
+    sigma_y[:,i] = sigma_max * (x**4)
+    sigma_y[:,dimy-1-i] = sigma_max * (x**4)
 
 
 def init_simulation(option):
     global kappa
-    u = np.zeros((3, dimx, dimy))           # The three dimensional simulation grid
-    c = 0.5                                # The "original" wave propagation speed
-    alpha = np.zeros((dimx, dimy))          # wave propagation velocities of the entire simulation domain
-    alpha[0:dimx, 0:dimy] = ((c*k) / h)**2  # will be set to a constant value of tau
+    u = np.zeros((3, dimx, dimy))
+    c = 0.5
+    alpha = np.zeros((dimx, dimy))
+    alpha[0:dimx, 0:dimy] = ((c*k) / h)**2
     kappa = 1 * alpha / 1
 
     if option == 3 or option == 4:
         alpha[0:196, dimy - 200] = 0
-        alpha[204:400, dimy - 200] = 0
+        alpha[204:dimx, dimy - 200] = 0
 
     if option == 4:
         alpha[0:128, dimy - 100] = 0
         alpha[136:264, dimy - 100] = 0
-        alpha[272:400, dimy - 100] = 0
+        alpha[272:dimx, dimy - 100] = 0
+
+    if option == 5:
+        alpha[150:250, dimy - 200] = 0
+        alpha[150:250, dimy - 100] = 0
+
+        alpha[150, dimy - 200:dimy - 100] = 0
+        alpha[250, dimy - 200:dimy - 100] = 0
+
+    if option == 6:
+        alpha[150:196, dimy - 200] = 0
+        alpha[204:250, dimy - 200] = 0
+
+        alpha[150:196, dimy - 100] = 0
+        alpha[204:250, dimy - 100] = 0
+
+        alpha[150, 200:246] = 0
+        alpha[150, 254:300] = 0
+
+        alpha[250, 200:246] = 0
+        alpha[250, 254:300] = 0
 
     return u, alpha
 
 
 def update(u, alpha):
-    u[2] = u[1]
-    u[1] = u[0]
-
-    # This switch is for educational purposes. The fist implementation is approx 50 times slower in python!
-    use_terribly_slow_implementation = False
-    if use_terribly_slow_implementation:
-        # Version 1: Easy to understand but terribly slow!
-        for c in range(1, dimx-1):
-            for r in range(1, dimy-1):
-                u[0, c, r] = alpha[c, r] * (u[1, c-1, r] + u[1, c+1, r] + u[1, c, r-1] + u[1, c, r+1] - 4*u[1, c, r])
-                u[0, c, r] += 2 * u[1, c, r] - u[2, c, r]
-    else:
-
-        u[0, 1:dimx-1, 1:dimy-1] = alpha[1:dimx-1, 1:dimy-1] * (u[1, 0:dimx-2, 1:dimy-1] +
-                                            u[1, 2:dimx,   1:dimy-1] +
-                                            u[1, 1:dimx-1, 0:dimy-2] +
-                                            u[1, 1:dimx-1, 2:dimy] - 4*u[1, 1:dimx-1, 1:dimy-1]) \
+    # u[2] = u[1]
+    # u[1] = u[0]
+    u[2, :, :] = u[1, :, :]
+    u[1, :, :] = u[0, :, :]
+    u[0, 1:dimx-1, 1:dimy-1] = alpha[1:dimx-1, 1:dimy-1] * (u[1, 0:dimx-2, 1:dimy-1] +
+                                         u[1, 2:dimx,   1:dimy-1] +
+                                         u[1, 1:dimx-1, 0:dimy-2] +
+                                         u[1, 1:dimx-1, 2:dimy] - 4*u[1, 1:dimx-1, 1:dimy-1]) \
                                         + 2 * u[1, 1:dimx-1, 1:dimy-1] - u[2, 1:dimx-1, 1:dimy-1]
 
 
     u[0, 1:dimx-1, 1:dimy-1] *= 0.998
 
     boundary_size = 1
-    mur = True
-    if mur:
-        update_boundary(u, boundary_size)
+    u[0, :, :] += dt * (sigma_x[:, :] * (u[1, :, :] - u[0, :, :]) + sigma_y[:, :] * (u[1, :, :] - u[0, :, :]))
+
+    update_boundary(u, boundary_size)
 
 
 def update_boundary(u, sz) -> None:
@@ -113,6 +139,12 @@ def main(option):
     elif option == 4:
         pygame.display.set_caption("Równanie falowe - z 2 przeszkodami")
 
+    elif option == 5:
+        pygame.display.set_caption("Równanie falowe - z kwadratem")
+
+    elif option == 6:
+        pygame.display.set_caption("Równanie falowe - z kwadratem z dziurami")
+
     u, alpha = init_simulation(option)
     pixeldata = np.zeros((dimx, dimy, 3), dtype=np.uint8)
 
@@ -140,10 +172,7 @@ def main(option):
                 place_raindrops(u, [200, 400])
                 place_raindrops(u, [600, 400])
 
-            elif option == 3:
-                place_raindrops(u, [400, 200])
-
-            elif option == 4:
+            elif option == 3 or option == 5 or option == 6:
                 place_raindrops(u, [400, 200])
 
         update(u, alpha)
@@ -164,13 +193,35 @@ def main(option):
             pygame.draw.line(display, (0, 0, 0), (136 * 2, 600), (264 * 2, 600), 1)
             pygame.draw.line(display, (0, 0, 0), (272 * 2, 600), (400 * 2, 600), 1)
 
+        if option == 5:
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 400), (250 * 2, 400), 1)
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 600), (250 * 2, 600), 1)
+
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 400), (150 * 2, 600), 1)
+            pygame.draw.line(display, (0, 0, 0), (250 * 2, 400), (250 * 2, 600), 1)
+
+        if option == 6:
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 400), (196 * 2, 400), 1)
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 600), (196 * 2, 600), 1)
+
+            pygame.draw.line(display, (0, 0, 0), (204 * 2, 400), (250 * 2, 400), 1)
+            pygame.draw.line(display, (0, 0, 0), (204 * 2, 600), (250 * 2, 600), 1)
+
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 400), (150 * 2, 246 * 2), 1)
+            pygame.draw.line(display, (0, 0, 0), (150 * 2, 254 * 2), (150 * 2, 600), 1)
+
+            pygame.draw.line(display, (0, 0, 0), (250 * 2, 400), (250 * 2, 246 * 2), 1)
+            pygame.draw.line(display, (0, 0, 0), (250 * 2, 254 * 2), (250 * 2, 600), 1)
+
         pygame.display.update()
 
 
 if __name__ == "__main__":
-    main(4)
+    main(6)
 
 # 1 - 1 punkt
 # 2 - 2 punkty
 # 3 - z przeszkodą
 # 4 - z 2 przeszkodami
+# 5 - pusty kwadrat
+# 6 - kwadrat z dziurami
