@@ -172,7 +172,7 @@ def main(option):
                 place_raindrops(u, [200, 400])
                 place_raindrops(u, [600, 400])
 
-            elif option == 3 or option == 5 or option == 6:
+            elif option == 3 or option ==4 or option == 5 or option == 6:
                 place_raindrops(u, [400, 200])
 
         update(u, alpha)
